@@ -1,0 +1,8 @@
+name = "komodo-alert-to-telegram"
+main = "app.js"
+compatibility_date = "2023-10-30"
+
+[vars]
+# For local development only
+# TELEGRAM_BOT_TOKEN = "your_bot_token_for_development"
+# TELEGRAM_CHAT_ID = "your_chat_id_for_development"
