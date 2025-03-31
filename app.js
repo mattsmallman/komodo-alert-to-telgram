@@ -79,8 +79,7 @@ async function handleRequest(request) {
         }
 
         // Create a more descriptive message for Telegram
-        const telegramMessage = `${levelEmoji} *ALERT*\n` +
-            `*Level*: ${alertLevel}\n` +
+        const telegramMessage = `${levelEmoji} ${alertLevel}\n` +
             `*Type*: ${alertType}\n` +
             `*Target*: ${alertTargetType} (${alertTargetId})\n` +
             `*Name*: ${alertName}\n` +
