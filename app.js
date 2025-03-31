@@ -41,7 +41,7 @@ async function handleRequest(request) {
             "Unknown";
 
         // Format the message for Telegram
-        const telegramMessage = `🚨 *ALERT*\nMessage: ${alertMessage}\nSeverity: ${alertSeverity}`;
+        const telegramMessage = `🚨 *ALERT*\nMessage: ${alertData}\nSeverity: ${alertSeverity}`;
 
         // Your Telegram bot token and chat ID (set these in Cloudflare Worker environment variables)
         const botToken = TELEGRAM_BOT_TOKEN; // Set in Cloudflare Worker environment
