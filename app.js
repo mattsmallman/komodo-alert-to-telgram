@@ -17,8 +17,13 @@ async function handleRequest(request) {
     const url = new URL(request.url);
     const apiKeyParam = url.searchParams.get('api_key');
 
+    // Log the request for debugging
+    console.log("Request received:", request.url);
+    console.log("API key check:", apiKeyParam ? "Key provided" : "No key provided");
+
     // API key should be stored as an environment variable in Cloudflare
     if (!apiKeyParam || apiKeyParam !== API_KEY_SECRET) {
+        console.log("Authentication failed: Invalid API key");
         return new Response('Unauthorized: Invalid or missing API key', {
             status: 401,
             headers: { 'Content-Type': 'application/json' }
@@ -26,33 +31,72 @@ async function handleRequest(request) {
     }
 
     try {
-        // Parse the alert JSON from your Rust application
+        // Parse the alert JSON
         const alertData = await request.json();
 
-        // log the received alert data for debugging
-        console.log("Received alert data:", JSON.stringify(alertData, null, 2));
+        // Log the full structure for debugging
+        console.log("Received alert data:", JSON.stringify(alertData));
 
-        // Extract the relevant information (handle nested structures in case of different alert formats)
-        const alertMessage = alertData.message ||
-            alertData.data?.message ||
-            alertData.alertData?.message ||
-            "Alert triggered";
+        // Extract information based on the specific structure you provided
+        const alertLevel = alertData.level || "Unknown";
+        const alertType = alertData.data?.type || "Unknown Type";
+        const alertTargetId = alertData.target?.id || "Unknown Target";
+        const alertTargetType = alertData.target?.type || "Unknown Target Type";
+        const isResolved = alertData.resolved ? "Yes" : "No";
+        const alertName = alertData.data?.data?.name || "Unnamed";
 
-        const alertSeverity = alertData.severity ||
-            alertData.data?.severity ||
-            alertData.alertData?.severity ||
-            "Unknown";
+        console.log("Extracted data:", {
+            level: alertLevel,
+            type: alertType,
+            targetId: alertTargetId,
+            targetType: alertTargetType,
+            resolved: isResolved,
+            name: alertName
+        });
 
-        // Format the message for Telegram including the raw JSON for debugging
-        const rawJson = JSON.stringify(alertData, null, 2);
-        const telegramMessage = `🚨 *ALERT*\nMessage: ${alertMessage}\nSeverity: ${alertSeverity}\n\n*Raw JSON:*\n\`\`\`\n${rawJson}\n\`\`\``;
+        // Select emoji based on alert level
+        let levelEmoji = "ℹ️"; // Default info emoji
 
-        // Your Telegram bot token and chat ID (set these in Cloudflare Worker environment variables)
-        const botToken = TELEGRAM_BOT_TOKEN; // Set in Cloudflare Worker environment
-        const chatId = TELEGRAM_CHAT_ID; // Set in Cloudflare Worker environment
+        switch (alertLevel.toUpperCase()) {
+            case "CRITICAL":
+                levelEmoji = "🔴";
+                break;
+            case "ERROR":
+                levelEmoji = "🚨";
+                break;
+            case "WARNING":
+                levelEmoji = "⚠️";
+                break;
+            case "INFO":
+                levelEmoji = "ℹ️";
+                break;
+            case "OK":
+                levelEmoji = "✅";
+                break;
+            default:
+                // Use default emoji
+                console.log("Unknown alert level:", alertLevel);
+        }
 
-        // Log to console for debugging in Cloudflare dashboard
-        console.log("Received alert data:", rawJson);
+        // Create a more descriptive message for Telegram
+        const telegramMessage = `${levelEmoji} *ALERT*\n` +
+            `*Level*: ${alertLevel}\n` +
+            `*Type*: ${alertType}\n` +
+            `*Target*: ${alertTargetType} (${alertTargetId})\n` +
+            `*Name*: ${alertName}\n` +
+            `*Resolved*: ${isResolved}\n` +
+            `*Time*: ${new Date(alertData.ts).toISOString()}`;
+
+        console.log("Formatted message:", telegramMessage);
+
+        // Your Telegram bot token and chat ID (set in environment variables)
+        const botToken = TELEGRAM_BOT_TOKEN;
+        const chatId = TELEGRAM_CHAT_ID;
+
+        console.log("Sending to Telegram:", {
+            botTokenPrefix: botToken ? botToken.substring(0, 5) + "..." : "Not set",
+            chatId: chatId || "Not set"
+        });
 
         // Send to Telegram
         const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
@@ -69,15 +113,20 @@ async function handleRequest(request) {
         });
 
         const telegramResult = await telegramResponse.json();
+        console.log("Telegram API response:", JSON.stringify(telegramResult));
 
         if (!telegramResult.ok) {
+            console.log("Telegram API error:", telegramResult.description);
             throw new Error(`Telegram API error: ${telegramResult.description}`);
         }
+
+        console.log("Successfully sent message to Telegram");
 
         // Return success response
         return new Response(JSON.stringify({
             success: true,
-            message: "Alert sent to Telegram"
+            message: "Alert sent to Telegram",
+            formatted_message: telegramMessage
         }), {
             headers: {
                 'Content-Type': 'application/json',
@@ -88,6 +137,10 @@ async function handleRequest(request) {
         });
 
     } catch (error) {
+        // Log the error
+        console.error("Error processing request:", error.message);
+        console.error("Error stack:", error.stack);
+
         // Handle errors
         return new Response(JSON.stringify({
             success: false,
