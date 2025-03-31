@@ -40,12 +40,16 @@ async function handleRequest(request) {
             alertData.alertData?.severity ||
             "Unknown";
 
-        // Format the message for Telegram
-        const telegramMessage = `🚨 *ALERT*\nMessage: ${alertData}\nSeverity: ${alertSeverity}`;
+        // Format the message for Telegram including the raw JSON for debugging
+        const rawJson = JSON.stringify(alertData, null, 2);
+        const telegramMessage = `🚨 *ALERT*\nMessage: ${alertMessage}\nSeverity: ${alertSeverity}\n\n*Raw JSON:*\n\`\`\`\n${rawJson}\n\`\`\``;
 
         // Your Telegram bot token and chat ID (set these in Cloudflare Worker environment variables)
         const botToken = TELEGRAM_BOT_TOKEN; // Set in Cloudflare Worker environment
         const chatId = TELEGRAM_CHAT_ID; // Set in Cloudflare Worker environment
+
+        // Log to console for debugging in Cloudflare dashboard
+        console.log("Received alert data:", rawJson);
 
         // Send to Telegram
         const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
