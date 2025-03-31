@@ -7,3 +7,16 @@ compatibility_date = "2023-10-30"
 # API_SECRET_KEY = "your_api_secret_key_for_development"
 # TELEGRAM_BOT_TOKEN = "your_bot_token_for_development"
 # TELEGRAM_CHAT_ID = "your_chat_id_for_development"
+
+# Your environment variables go here
+
+# Enable log collection
+[triggers]
+crons = []
+
+# Configure logging
+[logs]
+# To enable logging to the Cloudflare dashboard
+dash_log = true
+# To set the log level (optional)
+log_level = "debug"  # Options: "debug", "info", "warn", "error"

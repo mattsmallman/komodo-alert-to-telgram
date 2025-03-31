@@ -29,6 +29,9 @@ async function handleRequest(request) {
         // Parse the alert JSON from your Rust application
         const alertData = await request.json();
 
+        // log the received alert data for debugging
+        console.log("Received alert data:", JSON.stringify(alertData, null, 2));
+
         // Extract the relevant information (handle nested structures in case of different alert formats)
         const alertMessage = alertData.message ||
             alertData.data?.message ||
