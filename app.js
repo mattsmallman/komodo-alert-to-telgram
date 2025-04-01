@@ -44,7 +44,7 @@ async function handleRequest(request) {
         const alertTargetType = alertData.target?.type || "Unknown Target Type";
         const isResolved = alertData.resolved ? "Yes" : "No";
         const alertName = alertData.data?.data?.name || "Unnamed";
-        const alertInfoData = alertData.data || { info: "No alert data available" };
+        const alertInfoData = alertData.data?.data || { info: "No alert data available" };
 
         console.log("Extracted data:", {
             level: alertLevel,
