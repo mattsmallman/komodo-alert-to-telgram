@@ -78,10 +78,36 @@ async function handleRequest(request) {
                 console.log("Unknown alert level:", alertLevel);
         }
 
+        // create url
+        const baseUrl = KOMODO_URL;
+
+        const targetTypePathMap = {
+            "stack": "stacks",
+            "server": "servers",
+            "alerter": "alerters",
+            "deployment": "deployments",
+            "build": "builds",
+            "repo": "repos",
+            "procedure": "procedures",
+            "action": "actions",
+            "builder": "builders",
+            "template": "templates",
+            "sync": "syncs"
+        };
+
+        const pathSegment = targetTypePathMap[alertTargetType];
+        const url = pathSegment
+            ? `${baseUrl}/${pathSegment}/${alertTargetId}`
+            : baseUrl;
+
+        if (!pathSegment) {
+            console.log("Unknown alert target type:", alertTargetType);
+        }
+
         // Create a more descriptive message for Telegram
         const telegramMessage = `${levelEmoji} ${alertLevel}\n` +
             `*Type*: ${alertType}\n` +
-            `*Target*: ${alertTargetType} (${alertTargetId})\n` +
+            `*Target*: [${alertTargetType} (${alertTargetId})](${url})\n` +
             `*Name*: ${alertName}\n` +
             `*Resolved*: ${isResolved}\n` +
             `*Time*: ${new Date(alertData.ts).toISOString()}`;
