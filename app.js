@@ -44,6 +44,7 @@ async function handleRequest(request) {
         const alertTargetType = alertData.target?.type || "Unknown Target Type";
         const isResolved = alertData.resolved ? "Yes" : "No";
         const alertName = alertData.data?.data?.name || "Unnamed";
+        const alertInfoData = alertData.data || "No alert data";
 
         console.log("Extracted data:", {
             level: alertLevel,
@@ -109,7 +110,8 @@ async function handleRequest(request) {
         // Create a more descriptive message for Telegram
         const telegramMessage = `${levelEmoji} ${alertLevel} - ${alertType}\n` +
             `*For*: [${alertName} (${alertTargetType})](${url})\n` +
-            `*Resolved*: ${resolvedStausEmoji}\n`;
+            `*Resolved*: ${resolvedStausEmoji}\n` +
+            `*Data*: ${JSON.stringify(alertInfoData, null, 2)}`;
 
         console.log("Formatted message:", telegramMessage);
 
