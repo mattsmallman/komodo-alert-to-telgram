@@ -104,13 +104,12 @@ async function handleRequest(request) {
             console.log("Unknown alert target type:", alertTargetType);
         }
 
+        const resolvedStausEmoji = isResolved === "Yes" ? "✅" : "❌";
+
         // Create a more descriptive message for Telegram
-        const telegramMessage = `${levelEmoji} ${alertLevel}\n` +
-            `*Type*: ${alertType}\n` +
-            `*Target*: [${alertTargetType} (${alertTargetId})](${url})\n` +
-            `*Name*: ${alertName}\n` +
-            `*Resolved*: ${isResolved}\n` +
-            `*Time*: ${new Date(alertData.ts).toISOString()}`;
+        const telegramMessage = `${levelEmoji} ${alertLevel} - ${alertType}\n` +
+            `*For*: [${alertName} (${alertTargetType})](${url})\n` +
+            `*Resolved*: ${resolvedStausEmoji}\n`;
 
         console.log("Formatted message:", telegramMessage);
 
