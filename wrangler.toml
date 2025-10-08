@@ -1,6 +1,10 @@
 name = "komodo-alert-to-telegram"
 main = "app.js"
 compatibility_date = "2023-10-30"
+workers_dev = true
+
+[build]
+command = ""
 
 [vars]
 # For local development only
@@ -20,7 +24,7 @@ bindings = [
 
 [[migrations]]
 tag = "v1"
-new_classes = ["AlertDebouncer"]
+new_sqlite_classes = ["AlertDebouncer"]
 
 # Configure logging
 [observability.logs]

@@ -154,9 +154,11 @@ function getTargetTypePathMap() {
     };
 }
 
-addEventListener('fetch', event => {
-    event.respondWith(handleRequest(event.request, event.env));
-});
+export default {
+    async fetch(request, env, ctx) {
+        return handleRequest(request, env);
+    }
+};
 
 async function handleRequest(request, env) {
     // Handle CORS preflight requests
