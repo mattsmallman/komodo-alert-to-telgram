@@ -1,6 +1,6 @@
 # Komodo Alert to Telegram
 
-A Cloudflare Worker that forwards Komodo alerts to Telegram. This worker receives alert webhooks from Komodo and forwards them to a specified Telegram chat with formatted messages including emojis based on alert levels.
+A Cloudflare Worker that forwards Komodo alerts to Telegram with smart debouncing. This worker receives alert webhooks from Komodo, waits 60 seconds to filter out brief state changes, and forwards persistent alerts to a specified Telegram chat with formatted messages including emojis based on alert levels.
 
 ## Deployment
 
@@ -45,6 +45,9 @@ Required variables:
 - `TELEGRAM_BOT_TOKEN`: Your Telegram bot token from [@BotFather](https://t.me/botfather)
 - `TELEGRAM_CHAT_ID`: The Telegram chat ID where alerts should be sent
 - `KOMODO_URL`: Base URL of your Komodo server for generating links
+
+Optional variables:
+- `DEBOUNCE_SECONDS`: Delay before sending alerts (default: 60 seconds)
 
 5. Deploy to Cloudflare Workers:
 ```bash
@@ -99,6 +102,8 @@ wrangler dev
 ## Features
 
 - Forwards Komodo alerts to Telegram
+- **Alert debouncing**: 60-second delay prevents spam from brief state changes
+- Smart handling of stack state transitions (running ↔ unhealthy)
 - Formats messages with appropriate emojis based on alert level
 - Includes clickable links to Komodo resources
 - Supports CORS for web integrations
