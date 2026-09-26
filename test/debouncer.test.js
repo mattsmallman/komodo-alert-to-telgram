@@ -1,6 +1,6 @@
-import { test, beforeEach } from 'node:test';
+import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { AlertDebouncer } from '../app.js';
+import worker, { AlertDebouncer } from '../app.js';
 
 // Telegram API stub. Set `failMode` to make sends fail.
 let sent;
@@ -172,4 +172,73 @@ test('DEBOUNCE_SECONDS=0 sends without delay', async () => {
     await post(cpu('WARNING', false, 91.2));
     await wait(0);
     assert.equal(sent.length, 1);
+});
+
+test('after retries run out the alert still counts as reported, so recovery is sent', async () => {
+    await post(stack('running', 'down'));
+    failMode = 'all';
+    await wait(61);
+    await wait(31);
+    await wait(31);
+    assert.equal(sent.length, 0);
+    failMode = null;
+    await post(stack('down', 'running'));
+    await wait(61);
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].text, /is running again/);
+});
+
+test('long line values are truncated', async () => {
+    await post({
+        ts: now, resolved: false, level: 'CRITICAL', target: { type: 'Server', id: 'x3' },
+        data: { type: 'ServerUnreachable', data: { id: 'x3', name: 'edge', err: { error: 'e'.repeat(10_000) } } }
+    });
+    await wait(61);
+    assert.ok(sent[0].text.length < 1000);
+    assert.match(sent[0].text, /\(truncated\)/);
+});
+
+test('invalid TIMEZONE falls back to UTC', async () => {
+    debouncer.env.TIMEZONE = 'Not/AZone';
+    await post(event('ActionFailed', 'Action', { id: 'x1', name: 'nightly' }));
+    assert.equal(sent.length, 1);
+    assert.match(sent[0].text, /Time: .* UTC$/);
+});
+
+describe('HTTP entry point', () => {
+    const env = () => ({
+        API_KEY_SECRET: 'secret',
+        ALERT_DEBOUNCER: { idFromName: () => 'id', get: () => debouncer }
+    });
+    const alert = () => JSON.stringify(event('Test', 'Alerter', { id: 'x1', name: 'telegram' }, 'OK'));
+    const call = (url, init) => worker.fetch(new Request(url, init), env());
+
+    test('rejects methods other than POST', async () => {
+        const res = await call('https://w/?api_key=secret', { method: 'GET' });
+        assert.equal(res.status, 405);
+    });
+
+    test('rejects a missing or wrong key', async () => {
+        assert.equal((await call('https://w/', { method: 'POST', body: alert() })).status, 401);
+        assert.equal((await call('https://w/?api_key=nope', { method: 'POST', body: alert() })).status, 401);
+        assert.equal(sent.length, 0);
+    });
+
+    test('accepts the key as a query parameter', async () => {
+        const res = await call('https://w/?api_key=secret', { method: 'POST', body: alert() });
+        assert.equal(res.status, 200);
+        assert.equal(sent.length, 1);
+    });
+
+    test('accepts the key as basic-auth credentials', async () => {
+        const headers = { Authorization: `Basic ${btoa('komodo:secret')}` };
+        const res = await call('https://w/', { method: 'POST', body: alert(), headers });
+        assert.equal(res.status, 200);
+        assert.equal(sent.length, 1);
+    });
+
+    test('rejects a body that is not a Komodo alert', async () => {
+        assert.equal((await call('https://w/?api_key=secret', { method: 'POST', body: 'not json' })).status, 400);
+        assert.equal((await call('https://w/?api_key=secret', { method: 'POST', body: '{}' })).status, 400);
+    });
 });

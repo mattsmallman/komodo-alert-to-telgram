@@ -27,8 +27,10 @@ const STATE_EMOJI = {
 };
 
 const MAX_SEND_ATTEMPTS = 3;
-// Telegram rejects messages over 4096 characters. Leave room for the other lines.
-const MAX_BODY_LENGTH = 3000;
+// Telegram rejects messages over 4096 characters. Cap the body and each line
+// so the total stays under the limit.
+const MAX_BODY_LENGTH = 2500;
+const MAX_LINE_LENGTH = 300;
 const RETRY_DELAY_MS = 30 * 1000;
 
 // Durable Object for managing alert delays. Pending alerts live in storage and
@@ -148,14 +150,16 @@ export class AlertDebouncer {
             try {
                 await this.send(formatAlert(entry.alert, this.env));
             } catch (error) {
+                // Falls through to the "sent" bookkeeping below once attempts run out.
                 const attempts = (entry.attempts || 0) + 1;
                 console.error(`Send failed for ${key} (attempt ${attempts}):`, error.message);
                 if (attempts < MAX_SEND_ATTEMPTS) {
                     await this.storage.put(key, { ...entry, attempts, dueAt: now + RETRY_DELAY_MS });
-                } else {
-                    await this.storage.delete(key);
+                    continue;
                 }
-                continue;
+                // Give up on this message, but record it as reported so that the
+                // recovery or resolved message is still sent later.
+                console.error(`Giving up on ${key} after ${attempts} attempts`);
             }
 
             const type = entry.alert.data.type;
@@ -246,10 +250,14 @@ function resourceUrl(alert, env) {
 
 function formatTime(ts, env) {
     if (!ts) return null;
-    return new Date(ts).toLocaleString('en-GB', {
-        timeZone: env.TIMEZONE || 'UTC',
-        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-    });
+    const options = { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' };
+    const timeZone = env.TIMEZONE || 'UTC';
+    try {
+        return new Date(ts).toLocaleString('en-GB', { ...options, timeZone });
+    } catch (error) {
+        console.error(`Invalid TIMEZONE "${timeZone}", using UTC:`, error.message);
+        return `${new Date(ts).toLocaleString('en-GB', { ...options, timeZone: 'UTC' })} UTC`;
+    }
 }
 
 function formatDuration(ms) {
@@ -258,6 +266,10 @@ function formatDuration(ms) {
     if (minutes < 60) return `${minutes} min`;
     const hours = Math.floor(minutes / 60);
     return `${hours} h ${minutes % 60} min`;
+}
+
+function truncate(text, max) {
+    return text.length > max ? `${text.slice(0, max)}… (truncated)` : text;
 }
 
 function percent(used, total) {
@@ -368,7 +380,7 @@ function describe(alert) {
             return { title: `Action ${name} failed`, lines };
 
         case 'ScheduleRun':
-            return { title: `Scheduled run started for ${escapeHtml(d.resource_type).toLowerCase()} ${name}`, lines };
+            return { title: `Scheduled run started for ${escapeHtml(d.resource_type || 'resource').toLowerCase()} ${name}`, lines };
 
         case 'Custom':
             return { title: `<b>${escapeHtml(d.message)}</b>`, lines, body: d.details };
@@ -400,10 +412,10 @@ function formatAlert(alert, env) {
 
     const out = [`${emoji} ${linkedTitle}`];
     for (const [label, value] of lines) {
-        out.push(`${label}: ${escapeHtml(value)}`);
+        out.push(`${label}: ${escapeHtml(truncate(String(value ?? ''), MAX_LINE_LENGTH))}`);
     }
     if (body) {
-        const text = body.length > MAX_BODY_LENGTH ? `${body.slice(0, MAX_BODY_LENGTH)}\n… (truncated)` : body;
+        const text = truncate(body, MAX_BODY_LENGTH);
         out.push(pre ? `<pre>${escapeHtml(text)}</pre>` : escapeHtml(text));
     }
 
@@ -418,54 +430,73 @@ function formatAlert(alert, env) {
     return out.join('\n');
 }
 
+// Komodo's Custom alerter only has a URL setting, so the key has to travel in
+// the URL. It can be a query parameter (?api_key=KEY) or basic-auth
+// credentials (https://komodo:KEY@host/), which the HTTP client sends as an
+// Authorization header and so keeps out of query-string logs.
+function requestKey(request) {
+    const auth = request.headers.get('Authorization') || '';
+    if (auth.startsWith('Basic ')) {
+        try {
+            const decoded = atob(auth.slice(6));
+            return decoded.slice(decoded.indexOf(':') + 1);
+        } catch {
+            return null;
+        }
+    }
+    return new URL(request.url).searchParams.get('api_key');
+}
+
+function safeEqual(a, b) {
+    const encoder = new TextEncoder();
+    const x = encoder.encode(a);
+    const y = encoder.encode(b);
+    let diff = x.length ^ y.length;
+    for (let i = 0; i < x.length; i++) {
+        diff |= x[i] ^ (y[i] ?? 0);
+    }
+    return diff === 0;
+}
+
+function jsonResponse(body, status = 200) {
+    return Response.json(body, { status });
+}
+
 export default {
     async fetch(request, env) {
-        if (request.method === 'OPTIONS') {
-            return handleCORS();
-        }
         if (request.method !== 'POST') {
-            return new Response('This endpoint requires a POST request', { status: 405 });
+            return jsonResponse({ success: false, error: 'This endpoint requires a POST request' }, 405);
         }
 
-        const apiKey = new URL(request.url).searchParams.get('api_key');
-        if (!apiKey || apiKey !== env.API_KEY_SECRET) {
+        const key = requestKey(request);
+        if (!key || !env.API_KEY_SECRET || !safeEqual(key, env.API_KEY_SECRET)) {
             console.log('Authentication failed: invalid or missing API key');
-            return new Response('Unauthorized: Invalid or missing API key', { status: 401 });
+            return jsonResponse({ success: false, error: 'Invalid or missing API key' }, 401);
+        }
+
+        let alert;
+        try {
+            alert = await request.json();
+        } catch {
+            return jsonResponse({ success: false, error: 'Body is not valid JSON' }, 400);
+        }
+        if (!alert?.data?.type || !alert?.target) {
+            return jsonResponse({ success: false, error: 'Body is not a Komodo alert' }, 400);
         }
 
         try {
-            const alert = await request.json();
             console.log('Received alert:', JSON.stringify(alert));
-
             const stub = env.ALERT_DEBOUNCER.get(env.ALERT_DEBOUNCER.idFromName('global'));
-            const doResponse = await stub.fetch(new Request('https://fake-host/schedule', {
+            const doResponse = await stub.fetch(new Request('https://debouncer/schedule', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(alert)
             }));
             const doResult = await doResponse.json();
-
-            return new Response(JSON.stringify({ success: true, message: doResult.message }), {
-                headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-            });
+            return jsonResponse({ success: true, message: doResult.message });
         } catch (error) {
-            console.error('Error processing request:', error.message, error.stack);
-            return new Response(JSON.stringify({ success: false, error: error.message }), {
-                status: 500,
-                headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
-            });
+            console.error('Error processing alert:', error.message, error.stack);
+            return jsonResponse({ success: false, error: error.message }, 500);
         }
     }
 };
-
-const CORS_HEADERS = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type'
-};
-
-function handleCORS() {
-    return new Response(null, {
-        headers: { ...CORS_HEADERS, 'Access-Control-Max-Age': '86400' }
-    });
-}
