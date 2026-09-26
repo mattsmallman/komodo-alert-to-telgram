@@ -115,6 +115,10 @@ wrangler dev
 - CORS headers for controlled web access
 - Environment variables for sensitive configuration
 
+## Licence
+
+MIT. You may use, copy and change this code. Keep the copyright notice in [LICENSE](LICENSE) to credit the original.
+
 ## Support
 
 For issues or questions, please open an issue in the GitHub repository.
