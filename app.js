@@ -27,6 +27,8 @@ const STATE_EMOJI = {
 };
 
 const MAX_SEND_ATTEMPTS = 3;
+// Telegram rejects messages over 4096 characters. Leave room for the other lines.
+const MAX_BODY_LENGTH = 3000;
 const RETRY_DELAY_MS = 30 * 1000;
 
 // Durable Object for managing alert delays. Pending alerts live in storage and
@@ -52,8 +54,7 @@ export class AlertDebouncer {
         } else if (LIFECYCLE_TYPES.has(type)) {
             message = await this.handleLifecycle(alert);
         } else {
-            await this.send(formatAlert(alert, this.env));
-            message = 'Event sent';
+            message = await this.sendNow(alert);
         }
         await this.rescheduleAlarm();
         console.log(`${alertKey(alert)}: ${message}`);
@@ -61,7 +62,22 @@ export class AlertDebouncer {
     }
 
     debounceMs() {
-        return (parseInt(this.env.DEBOUNCE_SECONDS) || 60) * 1000;
+        const seconds = parseInt(this.env.DEBOUNCE_SECONDS);
+        return (Number.isNaN(seconds) ? 60 : seconds) * 1000;
+    }
+
+    // Sends an alert immediately. On failure it is stored as a one-off retry
+    // entry, which alarm() sends and then deletes.
+    async sendNow(alert) {
+        try {
+            await this.send(formatAlert(alert, this.env));
+            return 'Sent';
+        } catch (error) {
+            console.error(`Send failed for ${alertKey(alert)}, will retry:`, error.message);
+            const key = `retry:${crypto.randomUUID()}`;
+            await this.storage.put(key, { alert, dueAt: Date.now() + RETRY_DELAY_MS, attempts: 1, retry: true });
+            return 'Send failed, retry scheduled';
+        }
     }
 
     // Entry shape: { alert, dueAt, sentLevel }
@@ -74,8 +90,7 @@ export class AlertDebouncer {
         if (alert.resolved) {
             await this.storage.delete(key);
             if (entry?.sentLevel) {
-                await this.send(formatAlert(alert, this.env));
-                return 'Resolved, follow-up sent';
+                return `Resolved, follow-up: ${await this.sendNow(alert)}`;
             }
             return 'Resolved before being sent, cancelled';
         }
@@ -144,7 +159,9 @@ export class AlertDebouncer {
             }
 
             const type = entry.alert.data.type;
-            if (STATE_CHANGE_TYPES.has(type)) {
+            if (entry.retry) {
+                await this.storage.delete(key);
+            } else if (STATE_CHANGE_TYPES.has(type)) {
                 const to = entry.alert.data.data.to;
                 if (to === 'running') {
                     await this.storage.delete(key);
@@ -386,7 +403,8 @@ function formatAlert(alert, env) {
         out.push(`${label}: ${escapeHtml(value)}`);
     }
     if (body) {
-        out.push(pre ? `<pre>${escapeHtml(body)}</pre>` : escapeHtml(body));
+        const text = body.length > MAX_BODY_LENGTH ? `${body.slice(0, MAX_BODY_LENGTH)}\n… (truncated)` : body;
+        out.push(pre ? `<pre>${escapeHtml(text)}</pre>` : escapeHtml(text));
     }
 
     const lifecycleResolved = LIFECYCLE_TYPES.has(alert.data?.type) && alert.resolved;

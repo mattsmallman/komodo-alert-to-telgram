@@ -82,6 +82,14 @@ curl -X POST "https://your-worker.your-subdomain.workers.dev?api_key=your_api_ke
 }'
 ```
 
+### Automated tests
+
+The debouncer and message formatting have tests that run with Node's built-in test runner:
+
+```bash
+npm test
+```
+
 ### Local Development
 
 1. Create a `.dev.vars` file with your development environment variables:

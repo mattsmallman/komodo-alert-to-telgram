@@ -1,0 +1,8 @@
+{
+  "name": "komodo-alert-to-telegram",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
