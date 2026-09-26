@@ -13,6 +13,7 @@ command = ""
 # TELEGRAM_CHAT_ID = "your_chat_id_for_development"
 # KOMODO_URL = "https://your-komodo-server/"
 # DEBOUNCE_SECONDS = "60"
+# TIMEZONE = "Europe/London"
 
 # Your environment variables go here
 

@@ -1,6 +1,6 @@
 # Komodo Alert to Telegram
 
-A Cloudflare Worker that forwards Komodo alerts to Telegram with smart debouncing. This worker receives alert webhooks from Komodo, waits 60 seconds to filter out brief state changes, and forwards persistent alerts to a specified Telegram chat with formatted messages including emojis based on alert levels.
+A Cloudflare Worker that forwards Komodo alerts to Telegram. It receives alerts from a Komodo Custom alerter, formats each alert type as a short readable message, and debounces alerts that often flap.
 
 ## Deployment
 
@@ -48,6 +48,7 @@ Required variables:
 
 Optional variables:
 - `DEBOUNCE_SECONDS`: Delay before sending alerts (default: 60 seconds)
+- `TIMEZONE`: IANA time zone for times in messages, for example `Europe/London` (default: `UTC`)
 
 5. Deploy to Cloudflare Workers:
 ```bash
@@ -64,23 +65,20 @@ https://your-worker.your-subdomain.workers.dev?api_key=your_api_key_secret
 
 ### Testing
 
-You can test the deployment by sending a POST request to your worker URL:
+Use the Test button on the alerter in Komodo, or send a test alert yourself:
 
 ```bash
 curl -X POST "https://your-worker.your-subdomain.workers.dev?api_key=your_api_key_secret" \
 -H "Content-Type: application/json" \
 -d '{
-  "level": "INFO",
+  "ts": 1790000000000,
+  "resolved": true,
+  "level": "OK",
   "data": {
-    "type": "test",
-    "data": {
-      "name": "Test Alert"
-    }
+    "type": "Test",
+    "data": { "id": "test-id", "name": "Test Alerter" }
   },
-  "target": {
-    "id": "test-id",
-    "type": "server"
-  }
+  "target": { "type": "Alerter", "id": "test-id" }
 }'
 ```
 
@@ -101,13 +99,12 @@ wrangler dev
 
 ## Features
 
-- Forwards Komodo alerts to Telegram
-- **Alert debouncing**: 60-second delay prevents spam from brief state changes
-- Smart handling of stack state transitions (running ↔ unhealthy)
-- Formats messages with appropriate emojis based on alert level
-- Includes clickable links to Komodo resources
-- Supports CORS for web integrations
-- Comprehensive error handling and logging
+- A readable message for each Komodo alert type, with a link to the resource in Komodo.
+- Server, disk, memory, CPU, version and swarm alerts wait `DEBOUNCE_SECONDS` before sending. If they resolve in that time, nothing is sent. If they were sent, a resolved message follows with how long the problem lasted. A change of level (warning to critical) is sent again.
+- Stack and deployment state changes are debounced. A return to the previous state within the window cancels the message. A return to running after a reported problem sends a recovery message.
+- Build, action and procedure failures, image updates, schedule runs, test and custom alerts are sent at once.
+- Pending alerts are kept in Durable Object storage and sent by an alarm, so they survive restarts.
+- If Telegram rejects a formatted message, it is resent as plain text.
 
 ## Security
 
