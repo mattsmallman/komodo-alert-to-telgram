@@ -1,0 +1,5 @@
+# Copy to .dev.vars for `npm run dev`. Do not commit .dev.vars.
+API_KEY_SECRET=choose-a-long-random-string
+TELEGRAM_BOT_TOKEN=123456789:replace-with-your-bot-token
+TELEGRAM_CHAT_ID=-1001234567890
+KOMODO_URL=https://komodo.example.com
