@@ -1,8 +1,19 @@
 {
   "name": "komodo-alert-to-telegram",
+  "description": "Cloudflare Worker that forwards Komodo alerts to Telegram",
   "private": true,
+  "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "dev": "wrangler dev",
+    "check": "wrangler deploy --dry-run --outdir .wrangler/dry-run",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.141.0"
   }
 }
